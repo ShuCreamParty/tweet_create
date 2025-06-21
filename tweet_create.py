@@ -9,9 +9,9 @@ import traceback
 from dotenv import load_dotenv
 import schedule
 import time
-import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
-from google.generativeai import GenerationConfig, Tool, GoogleSearch
+from google import genai
+from google.genai import types
+
 
 
 load_dotenv()
@@ -28,7 +28,8 @@ NOTIFICATION_EMAIL = os.environ.get("NOTIFICATION_EMAIL")
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-GENERATION_PROMPT = GENERATION_PROMPT = """
+GENERATED=
+GENERATION_PROMPT = """
 # 指示
 以降の応答では、思考プロセス、補足説明、前置き、候補の提案、生成後の感想などは一切出力せず、ツイートの本文そのものだけを直接出力してください。
 
@@ -39,7 +40,7 @@ GENERATION_PROMPT = GENERATION_PROMPT = """
 - 絵文字や特殊文字は、全く使わないか、大量に使うかのどちらかにしてください。
 - 5～30文字程度の短い内容が望ましいです。
 - Google検索機能を用いて、最近の話題や情報をネタに含めると良いです。
-- 高専、富山県、音ゲー、ボーカロイド、ポケモン、麻雀、プログラミング、IT、スイーツなどのジャンルの要素を1つ以上絡めてください。
+- 高専、富山県、音ゲー、ボーカロイド、ポケモン、麻雀、プログラミング、IT、スイーツなどのジャンルの要素をどれか1つ以上絡めてください。
 
 # 良い出力例
 プログラミングしてるときの「あ、完全に理解した」は、だいたい何も理解してない。
@@ -60,44 +61,21 @@ GENERATION_PROMPT = GENERATION_PROMPT = """
 [思考]最近のITニュースを検索...新しいプログラミング言語が話題か。それをネタにしよう。[生成]
 新しい言語、とりあえず触ってみるけど、結局手に馴染んだ言語に戻ってきちゃう。
 
+また、以下のツイートは過去に生成されたものです。特に、最後のものは前回生成されたものなので、ジャンルは違うものにしてください。また、部分的に似ているのは問題ないですが、完全に一致するものは絶対に生成しないでください。
+"""+GENERATED+"""
 ---
 上記の指示と例を厳守し、ツイートの本文のみを生成してください。
 """
 
 
-gemini_model = None
 try:
-    genai.configure(api_key=GEMINI_API_KEY)
-        
-    generation_config = GenerationConfig(
-        temperature=0.9,
-        max_output_tokens=280,
-    )
-
-    safety_settings = {
-        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-    }
-
-    grounding_tool = Tool(google_search=GoogleSearch())
-
-    gemini_model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash-preview-05-20",
-        generation_config=generation_config,
-        safety_settings=safety_settings,
-        tools=[grounding_tool]
-    )
-    print(f"[{datetime.datetime.now()}] Geminiモデルの初期化完了。")
-
+    genai_client = genai.Client(api_key=GEMINI_API_KEY)
+    print(f"[{datetime.datetime.now()}] Geminiクライアントの初期化完了。")
 except Exception as e:
-    print(f"[{datetime.datetime.now()}] Geminiモデルの初期化中にエラー: {e}", file=sys.stderr)
+    print(f"[{datetime.datetime.now()}] Geminiクライアントの初期化中にエラー: {e}", file=sys.stderr)
     traceback.print_exc(file=sys.stderr)
-    gemini_model = None
 
 
-twitter_client = None
 try:
     twitter_client = tweepy.Client(
         bearer_token=TWITTER_BEARER_TOKEN,
@@ -110,7 +88,6 @@ try:
 except Exception as e:
     print(f"[{datetime.datetime.now()}] Twitter Clientの初期化中にエラー: {e}", file=sys.stderr)
     traceback.print_exc(file=sys.stderr)
-    twitter_client = None
 
 
 def send_email_notification(subject, body):
@@ -146,9 +123,9 @@ def post_tweet_to_twitter(tweet_text):
         return False, "ツイート内容が空です"
     try:
         print(f"[{datetime.datetime.now()}] ツイート試行 (Client使用): {tweet_text[:50]}...")
-        response = twitter_client.create_tweet(text=tweet_text)
+        response = twitter_client.create_tweet(text=tweet_text+"\n#生成ツイート")
         tweet_id = response.data['id']
-        user = twitter_clientclient.get_me(user_auth=True).data
+        user = twitter_client.get_me(user_auth=True).data
         username = user.username
         print(f"[{datetime.datetime.now()}] ツイート成功! ID: {tweet_id}, Text: {tweet_text[:30]}...")
         tweet_url = f"https://twitter.com/{username}/status/{tweet_id}"
@@ -171,11 +148,25 @@ def post_tweet_to_twitter(tweet_text):
 
 
 def generate_tweet_idea_with_gemini(prompt):
-    if not gemini_model:
-        return "【エラー】Geminiモデルが利用できません。"
+    if not genai_client:
+        return "【エラー】Geminiクライアントが利用できません。"
     try:
         print(f"[{datetime.datetime.now()}] Geminiプロンプト送信 (Grounding有効):\n{prompt}")
-        response = gemini_model.generate_content(prompt)
+
+        grounding_tool = types.Tool(
+            google_search=types.GoogleSearch()
+        )
+
+        config = types.GenerateContentConfig(
+            tools=[grounding_tool]
+        )
+
+        response = genai_client.models.generate_content(
+            model="gemini-2.0-flash",  
+            contents=prompt,
+            config=config,
+        )
+
         raw_response_text = response.text
         print(f"[{datetime.datetime.now()}] Gemini Raw応答:\n{raw_response_text}")
         
@@ -184,18 +175,8 @@ def generate_tweet_idea_with_gemini(prompt):
             print(f"[{datetime.datetime.now()}] 警告: Geminiが空または空白のみのテキストを生成しました。Raw: '{raw_response_text}'")
             return "【エラー】Geminiが有効なテキストを生成しませんでした。"
 
-        possible_tweets = [t.strip() for t in generated_text.split('\n') if t.strip() and not t.startswith("候補")] 
-        if "いくつか候補を提案します" in generated_text and possible_tweets: 
-             generated_text = possible_tweets[0]
-        elif not possible_tweets and "いくつか候補を提案します" in generated_text: 
-             generated_text = generated_text.split('\n')[1] if len(generated_text.split('\n')) > 1 else generated_text
-
-        if len(generated_text) > 280:
-            print(f"[{datetime.datetime.now()}] Gemini生成テキストが長すぎるため切り詰めます。元: {len(generated_text)}文字")
-            generated_text = generated_text[:277] + "..."
-            
-        print(f"[{datetime.datetime.now()}] Gemini整形後応答(返却前): '{generated_text}' (長さ: {len(generated_text)})")
         return generated_text
+        
     except Exception as e:
         error_msg = f"Gemini APIアイデア生成エラー: {e}"
         print(f"[{datetime.datetime.now()}] {error_msg}", file=sys.stderr)
@@ -209,7 +190,7 @@ def scheduled_job():
     error_occurred = False
     
     try:
-        if not gemini_model:
+        if not genai_client:
             job_status = "ネタ生成スキップ (Geminiモデル無効)"
             error_occurred = True
             email_body_content = "Geminiモデルが無効なため、ネタ生成をスキップしました。"
