@@ -34,7 +34,7 @@ SMTP_PORT = 587
 
 LOG_FILE = 'generate.log'
 
-PROMPT_TEMPLATE = f"""
+PROMPT_TEMPLATE = """
 # 指示
 以降の応答では、思考プロセス、補足説明、前置き、候補の提案、生成後の感想などは一切出力せず、ツイートの本文そのものだけを直接出力してください。
 
