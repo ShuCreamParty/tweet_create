@@ -108,9 +108,6 @@ def generate(texts):
             config = config
         )
         print("生成完了。")
-    
-        if not response.parts:
-            raise ValueError("Geminiからの応答が空です。")
         
         return response.text.strip()
     
