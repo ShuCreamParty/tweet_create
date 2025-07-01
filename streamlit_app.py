@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_extras.keyboard_url import copy_to_clipboard
 import os
 import sys
 from google import genai
@@ -30,19 +31,18 @@ In subsequent responses, do not output any thought processes, supplementary expl
 """
 
 
-#Gemini Setup
-gemini_client = genai.Client(api_key = API_KEY)
-grounding_tool = types.Tool(
-    google_search = types.GoogleSearch()
-)
-config = types.GenerateContentConfig(
-    tools = [grounding_tool]
-)
-
-
 #Generate Tweet Function
 def generate(texts):
     try:
+        #Gemini Setup
+        gemini_client = genai.Client(api_key = API_KEY)
+        grounding_tool = types.Tool(
+            google_search = types.GoogleSearch()
+        )
+        config = types.GenerateContentConfig(
+            tools = [grounding_tool]
+        )
+        
         print("Generating tweet content...")
         response = gemini_client.models.generate_content(
             model = "gemini-2.0-flash",
@@ -82,6 +82,7 @@ if st.button(button_text, type="primary"):
 
 if "tweet_content" in st.session_state and st.session_state.tweet_content:
     st.subheader("✨ Generated Tweet!")
+    text_to_display = st.session_state.tweet_content
     st.text_area(
         label="You can copy this text:",
         value=st.session_state.tweet_content,
@@ -97,5 +98,5 @@ if "tweet_content" in st.session_state and st.session_state.tweet_content:
         st.link_button("Post on Twitter", tweet_url, use_container_width=True)
     
     with col2:
-        # Copy to Clipboard Button 
-        copy_button(text_to_display, "📋 Copy Text", use_container_width=True)
+        if st.button("📋 Copy Text", use_container_width=True):
+            copy_to_clipboard(text_to_display)
