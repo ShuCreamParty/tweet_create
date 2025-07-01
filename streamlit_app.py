@@ -1,5 +1,4 @@
 import streamlit as st
-from streamlit_extras.keyboard_url import copy_to_clipboard
 import os
 import sys
 from google import genai
@@ -8,7 +7,13 @@ from urllib.parse import quote
 
 
 # Load API Key from Streamlit Secrets or environment variables
-API_KEY = st.secrets.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY")
+API_KEY = os.getenv("GOOGLE_API_KEY")
+
+
+st.set_page_config(page_title="AI Tweet Generator", page_icon="🤖")
+st.title("🤖 AI Tweet Generator")
+st.write("Click the button to generate a short, interesting tweet with AI.")
+
 
 # Stop the app if the API Key is not configured on the server
 if not API_KEY:
@@ -20,7 +25,6 @@ if not API_KEY:
 PROMPT = """
 # Instruction
 In subsequent responses, do not output any thought processes, supplementary explanations, preambles, candidate suggestions, or post-generation comments. Only output the tweet text itself directly.
-
 # Requirements
 - Generate only **one** interesting one-liner tweet.
 - The language is limited to English.
@@ -64,12 +68,6 @@ def generate(texts):
 
 
 # Setting Page
-st.set_page_config(page_title="AI Tweet Generator", page_icon="🤖")
-st.title("🤖 AI Tweet Generator")
-st.write("Click the button to generate a short, interesting tweet with AI.")
-
-
-#Main Processing
 if "tweet_content" in st.session_state and st.session_state.tweet_content:
     button_text = "🔄 Regenerate Tweet"
 else:
@@ -89,14 +87,6 @@ if "tweet_content" in st.session_state and st.session_state.tweet_content:
         height=100
     )
 
-    col1, col2 = st.columns([1, 1])
-
-    with col1:
-        # Twitter Post Button
-        tweet_text_encoded = quote(text_to_display)
-        tweet_url = f"https://twitter.com/intent/tweet?text={tweet_text_encoded}"
-        st.link_button("Post on Twitter", tweet_url, use_container_width=True)
-    
-    with col2:
-        if st.button("📋 Copy Text", use_container_width=True):
-            copy_to_clipboard(text_to_display)
+    tweet_text_encoded = quote(text_to_display) + "\n#AI\nhttps://huggingface.co/spaces/ShuCreamParty/tweet_create"
+    tweet_url = f"https://twitter.com/intent/tweet?text={tweet_text_encoded}"
+    st.link_button("🐦 Post on Twitter", tweet_url, use_container_width=True)
